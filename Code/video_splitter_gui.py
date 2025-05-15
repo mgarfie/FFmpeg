@@ -17,6 +17,7 @@ class VideoSplitterApp:
         self.video_path_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
         self.segment_entry = tk.Entry(root)
+        self.duration_entry = tk.Entry(root)
         self.progress = tk.DoubleVar()
 
         self.pause_flag = False
@@ -33,16 +34,19 @@ class VideoSplitterApp:
         tk.Entry(root, textvariable=self.output_dir_var, width=50).grid(row=1, column=1)
         tk.Button(root, text="选择", command=self.choose_output_dir).grid(row=1, column=2)
 
-        tk.Label(root, text="分段数（可选）：").grid(row=2, column=0, padx=10, pady=5, sticky='e')
+        tk.Label(root, text="分几段（可选）：").grid(row=2, column=0, padx=10, pady=5, sticky='e')
         self.segment_entry.grid(row=2, column=1)
 
-        tk.Button(root, text="开始分割", command=self.run_split_thread).grid(row=3, column=1, pady=10)
-        self.pause_btn = tk.Button(root, text="暂停", command=self.toggle_pause)
-        self.pause_btn.grid(row=3, column=2)
+        tk.Label(root, text="每段时长（秒，可选）：").grid(row=3, column=0, padx=10, pady=5, sticky='e')
+        self.duration_entry.grid(row=3, column=1)
 
-        tk.Label(root, text="处理进度：").grid(row=4, column=0, padx=10, pady=5, sticky='e')
+        tk.Button(root, text="开始分割", command=self.run_split_thread).grid(row=4, column=1, pady=10)
+        self.pause_btn = tk.Button(root, text="暂停", command=self.toggle_pause)
+        self.pause_btn.grid(row=4, column=2)
+
+        tk.Label(root, text="处理进度：").grid(row=5, column=0, padx=10, pady=5, sticky='e')
         self.progress_bar = tk.Scale(root, variable=self.progress, from_=0, to=100, orient='horizontal', length=400)
-        self.progress_bar.grid(row=4, column=1, columnspan=2)
+        self.progress_bar.grid(row=5, column=1, columnspan=2)
 
     def choose_file(self):
         path = filedialog.askopenfilename(filetypes=[("视频文件", "*.mp4;*.avi;*.mov;*.mkv")])
@@ -78,6 +82,7 @@ class VideoSplitterApp:
         path = self.video_path_var.get()
         out_dir = self.output_dir_var.get()
         seg_input = self.segment_entry.get()
+        seg_duration_input = self.duration_entry.get()
 
         if not os.path.exists(path) or not os.path.exists(FFMPEG) or not os.path.exists(FFPROBE):
             messagebox.showerror("错误", "请确认视频文件和 ffmpeg 工具是否存在")
@@ -92,16 +97,25 @@ class VideoSplitterApp:
             return
 
         try:
-            seg_count = int(seg_input) if seg_input else 0
+            seg_count = int(seg_input) if seg_input else None
+            seg_len = int(seg_duration_input) if seg_duration_input else None
+
+            if seg_len and seg_count:
+                total_needed = seg_len * seg_count
+                if total_needed > duration:
+                    messagebox.showwarning("警告", f"视频总时长不足以生成 {seg_count} 段 {seg_len} 秒视频。将根据视频长度自动调整。")
+                    seg_count = int(duration // seg_len)
+            elif seg_len:
+                seg_count = math.ceil(duration / seg_len)
+            elif seg_count:
+                seg_len = math.ceil(duration / seg_count)
+            else:
+                seg_len = 10
+                seg_count = math.ceil(duration / seg_len)
+
         except ValueError:
             messagebox.showerror("输入错误", "请输入有效数字")
             return
-
-        if seg_count == 0:
-            seg_count = math.ceil(duration / 10)
-            seg_len = 10
-        else:
-            seg_len = math.floor(duration / seg_count)
 
         base = os.path.splitext(os.path.basename(path))[0]
 
